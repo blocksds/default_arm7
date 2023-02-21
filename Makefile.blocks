@@ -23,7 +23,8 @@ DEFINES		:=
 # ---------
 
 LIBS		:= -lc -lnds7 -ldswifi7 -lmm7
-LIBDIRS		:= $(BLOCKSDS)/libs/libnds $(BLOCKSDS)/libs/dswifi $(BLOCKSDS)/libs/maxmod
+LIBDIRS		:= $(BLOCKSDS)/libs/libnds $(BLOCKSDS)/libs/dswifi \
+		   $(BLOCKSDS)/libs/maxmod $(BLOCKSDS)/libs/libc
 
 # Build artifacts
 # -----------------
@@ -96,7 +97,7 @@ CXXFLAGS	+= -std=gnu++14 $(WARNFLAGS) $(DEFINES) $(ARCH) \
 		   -fomit-frame-pointer
 
 LDFLAGS		:= -mthumb -mthumb-interwork $(LIBDIRSFLAGS) \
-		   -Wl,-Map,$(MAP) -Wl,--gc-sections -specs=nano.specs \
+		   -Wl,-Map,$(MAP) -Wl,--gc-sections -nolibc -nostartfiles \
 		   -T$(BLOCKSDS)/sys/crts/ds_arm7.ld \
 		   -Wl,--start-group $(LIBS) -Wl,--end-group
 
