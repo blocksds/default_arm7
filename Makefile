@@ -1,137 +1,161 @@
-export ARM7_MAJOR	:= 0
-export ARM7_MINOR	:= 7
-export ARM7_PATCH	:= 4
+# SPDX-License-Identifier: Zlib
+#
+# Copyright (c) 2023 Antonio Niño Díaz
 
-VERSTRING	:=	$(ARM7_MAJOR).$(ARM7_MINOR).$(ARM7_PATCH)
-#---------------------------------------------------------------------------------
-.SUFFIXES:
-#---------------------------------------------------------------------------------
-ifeq ($(strip $(DEVKITARM)),)
-$(error "Please set DEVKITARM in your environment. export DEVKITARM=<path to>devkitARM)
+ifeq ($(strip $(BLOCKSDS)),)
+    $(error "Environment variable BLOCKSDS not found")
 endif
 
-include $(DEVKITARM)/ds_rules
-#---------------------------------------------------------------------------------
-# TARGET is the name of the output
-# BUILD is the directory where object files & intermediate files will be placed
-# SOURCES is a list of directories containing source code
-# INCLUDES is a list of directories containing extra header files
-#---------------------------------------------------------------------------------
-TARGET		:=	default
-BUILD		:=	build
-SOURCES		:=	source
-INCLUDES	:=	include build
+ARM7_MAJOR	:= 0
+ARM7_MINOR	:= 7
+ARM7_PATCH	:= 4
 
-#---------------------------------------------------------------------------------
-# options for code generation
-#---------------------------------------------------------------------------------
-ARCH	:=	-march=armv4t -mthumb -mthumb-interwork
+VERSTRING	:= $(ARM7_MAJOR).$(ARM7_MINOR).$(ARM7_PATCH)
 
-CFLAGS	:=	-g -Wall -Os\
-		-ffunction-sections -fdata-sections \
- 		-mcpu=arm7tdmi -mtune=arm7tdmi -fomit-frame-pointer\
-		-ffast-math \
-		$(ARCH)
+# Source code paths
+# -----------------
 
-CFLAGS	+=	$(INCLUDE) -DARM7
+SOURCEDIRS	:= source
+INCLUDEDIRS	:=
 
-ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=ds_arm7.specs -g $(ARCH) -Wl,--nmagic -Wl,-Map,$(notdir $*).map
+# Defines passed to all files
+# ---------------------------
 
+DEFINES		:=
 
-#---------------------------------------------------------------------------------
-# any extra libraries we wish to link with the project
-#---------------------------------------------------------------------------------
-LIBS	:= -ldswifi7 -lmm7 -lnds7
+# Libraries
+# ---------
 
+LIBS		:= -ldswifi7 -lmm7 -lnds7 -lc
+LIBDIRS		:= $(BLOCKSDS)/libs/dswifi \
+		   $(BLOCKSDS)/libs/maxmod \
+		   $(BLOCKSDS)/libs/libnds \
+		   $(BLOCKSDS)/libs/libc7
 
-#---------------------------------------------------------------------------------
-# list of directories containing libraries, this must be the top level containing
-# include and lib
-#---------------------------------------------------------------------------------
-LIBDIRS	:=	$(LIBNDS)
+# Build artifacts
+# -----------------
 
+BUILDDIR	:= build
+NAME		:= arm7
+ELF		:= $(NAME).elf
+DUMP		:= $(NAME).dump
+MAP		:= $(NAME).map
 
-#---------------------------------------------------------------------------------
-# no real need to edit anything past this point unless you need to add additional
-# rules for different file extensions
-#---------------------------------------------------------------------------------
-ifneq ($(BUILD),$(notdir $(CURDIR)))
-#---------------------------------------------------------------------------------
+# Tools
+# -----
 
-export VPATH	:=	$(foreach dir,$(SOURCES),$(CURDIR)/$(dir))
+PREFIX		:= arm-none-eabi-
+CC		:= $(PREFIX)gcc
+CXX		:= $(PREFIX)g++
+OBJDUMP		:= $(PREFIX)objdump
+MKDIR		:= mkdir
+RM		:= rm -rf
 
-CFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.c)))
-CPPFILES	:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.cpp)))
-SFILES		:=	$(foreach dir,$(SOURCES),$(notdir $(wildcard $(dir)/*.s)))
+# Verbose flag
+# ------------
 
-export OFILES	:=	$(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
-
-export INCLUDE	:=	$(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
-			$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-			-I$(CURDIR)/$(BUILD)
-
-export LIBPATHS	:=	$(foreach dir,$(LIBDIRS),-L$(dir)/lib)
-
-export DEPSDIR	:=	$(CURDIR)/build
-
-export OUTPUT	:=	$(CURDIR)/$(TARGET)
-
-#---------------------------------------------------------------------------------
-# use CXX for linking C++ projects, CC for standard C
-#---------------------------------------------------------------------------------
-ifeq ($(strip $(CPPFILES)),)
-#---------------------------------------------------------------------------------
-	export LD	:=	$(CC)
-#---------------------------------------------------------------------------------
+ifeq ($(VERBOSE),1)
+V		:=
 else
-#---------------------------------------------------------------------------------
-	export LD	:=	$(CXX)
-#---------------------------------------------------------------------------------
+V		:= @
 endif
-#---------------------------------------------------------------------------------
 
-.PHONY: all $(BUILD) clean
+# Source files
+# ------------
 
-all : $(BUILD)
+SOURCES_S	:= $(shell find -L $(SOURCEDIRS) -name "*.s")
+SOURCES_C	:= $(shell find -L $(SOURCEDIRS) -name "*.c")
+SOURCES_CPP	:= $(shell find -L $(SOURCEDIRS) -name "*.cpp")
 
-#---------------------------------------------------------------------------------
-$(BUILD):
-	@[ -d $@ ] || mkdir -p $@
-	@$(MAKE) -C $(BUILD) -f $(CURDIR)/Makefile
+# Compiler and linker flags
+# -------------------------
 
+DEFINES		+= -D__NDS__ -DARM7
 
-#---------------------------------------------------------------------------------
-dist: all
-#---------------------------------------------------------------------------------
-	@tar --exclude=*CVS* --exclude=.svn -cvjf default_arm7-src-$(VERSTRING).tar.bz2 source Makefile
-	@tar -cvjf default_arm7-$(VERSTRING).tar.bz2 default.elf
+ARCH		:= -mcpu=arm7tdmi -mtune=arm7tdmi
 
-#---------------------------------------------------------------------------------
-install: all
-#---------------------------------------------------------------------------------
-	mkdir -p $(DESTDIR)$(LIBNDS)
-	cp $(TARGET).elf $(DESTDIR)$(LIBNDS)
+WARNFLAGS	:= -Wall
 
-#---------------------------------------------------------------------------------
+ifeq ($(SOURCES_CPP),)
+    LD	:= $(CC)
+else
+    LD	:= $(CXX)
+endif
+
+INCLUDEFLAGS	:= $(foreach path,$(INCLUDEDIRS),-I$(path)) \
+		   $(foreach path,$(LIBDIRS),-I$(path)/include)
+
+LIBDIRSFLAGS	:= $(foreach path,$(LIBDIRS),-L$(path)/lib)
+
+ASFLAGS		+= -x assembler-with-cpp $(DEFINES) $(ARCH) \
+		   -mthumb -mthumb-interwork $(INCLUDEFLAGS) \
+		   -ffunction-sections -fdata-sections
+
+CFLAGS		+= -std=gnu11 $(WARNFLAGS) $(DEFINES) $(ARCH) \
+		   -mthumb -mthumb-interwork $(INCLUDEFLAGS) -O2 \
+		   -ffunction-sections -fdata-sections \
+		   -fomit-frame-pointer
+
+CXXFLAGS	+= -std=gnu++14 $(WARNFLAGS) $(DEFINES) $(ARCH) \
+		   -mthumb -mthumb-interwork $(INCLUDEFLAGS) -O2 \
+		   -ffunction-sections -fdata-sections \
+		   -fno-exceptions -fno-rtti \
+		   -fomit-frame-pointer
+
+LDFLAGS		:= -mthumb -mthumb-interwork $(LIBDIRSFLAGS) \
+		   -Wl,-Map,$(MAP) -Wl,--gc-sections -nolibc -nostartfiles \
+		   -T$(BLOCKSDS)/sys/crts/ds_arm7.ld \
+		   -Wl,--start-group $(LIBS) -Wl,--end-group
+
+# Intermediate build files
+# ------------------------
+
+OBJS		:= $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_S))) \
+		   $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_C))) \
+		   $(addsuffix .o,$(addprefix $(BUILDDIR)/,$(SOURCES_CPP)))
+
+DEPS		:= $(OBJS:.o=.d)
+
+# Targets
+# -------
+
+.PHONY: all clean dump
+
+all: $(ELF)
+
+$(ELF): $(OBJS)
+	@echo "  LD      $@"
+	$(V)$(LD) -o $@ $(OBJS) $(BLOCKSDS)/sys/crts/ds_arm7_crt0.o $(LDFLAGS)
+
+$(DUMP): $(ELF)
+	@echo "  OBJDUMP $@"
+	$(V)$(OBJDUMP) -h -C -S $< > $@
+
+dump: $(DUMP)
+
 clean:
-	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).elf  $(TARGET).arm7
+	@echo "  CLEAN"
+	$(V)$(RM) $(ELF) $(DUMP) $(MAP) $(BUILDDIR)
 
+# Rules
+# -----
 
-#---------------------------------------------------------------------------------
-else
+$(BUILDDIR)/%.s.o : %.s
+	@echo "  AS      $<"
+	@$(MKDIR) -p $(@D)
+	$(V)$(CC) $(ASFLAGS) -MMD -MP -c -o $@ $<
 
-DEPENDS	:=	$(OFILES:.o=.d)
+$(BUILDDIR)/%.c.o : %.c
+	@echo "  CC      $<"
+	@$(MKDIR) -p $(@D)
+	$(V)$(CC) $(CFLAGS) -MMD -MP -c -o $@ $<
 
-#---------------------------------------------------------------------------------
-# main targets
-#---------------------------------------------------------------------------------
+$(BUILDDIR)/%.cpp.o : %.cpp
+	@echo "  CXX     $<"
+	@$(MKDIR) -p $(@D)
+	$(V)$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
-$(OUTPUT).elf	:	$(OFILES) $(LIBNDS)/lib/libnds7.a
+# Include dependency files if they exist
+# --------------------------------------
 
--include $(DEPENDS)
-
-#---------------------------------------------------------------------------------------
-endif
-#---------------------------------------------------------------------------------------
+-include $(DEPS)
