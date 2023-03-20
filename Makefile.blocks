@@ -26,10 +26,9 @@ DEFINES		:=
 # Libraries
 # ---------
 
-LIBS		:= -ldswifi7 -lmm7 -lnds7 -lsysnds7 -lc
+LIBS		:= -ldswifi7 -lmm7 -lnds7 -lc
 LIBDIRS		:= $(BLOCKSDS)/libs/dswifi \
 		   $(BLOCKSDS)/libs/maxmod \
-		   $(BLOCKSDS)/libs/libsysnds \
 		   $(BLOCKSDS)/libs/libnds \
 		   $(BLOCKSDS)/libs/libc7
 
