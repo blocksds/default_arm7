@@ -39,7 +39,7 @@ BUILDDIR	:= build
 NAME		:= arm7
 ELF		:= $(NAME).elf
 DUMP		:= $(NAME).dump
-MAP		:= $(NAME).map
+MAP		:= build/$(NAME).map
 
 # Tools
 # -----
