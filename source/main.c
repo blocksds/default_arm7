@@ -77,6 +77,9 @@ int main() {
 
 	installWifiFIFO();
 	installSoundFIFO();
+	if (isDSiMode()) {
+		installCameraFIFO();
+	}
 
 	installSystemFIFO();
 
